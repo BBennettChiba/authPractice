@@ -1,63 +1,41 @@
 const express = require("express");
 const jwt = require("jsonwebtoken");
-const app = express();
-const cors = require("cors");
+const authRoutes = require("./routes/authRoutes");
+const cookieParser = require("cookie-parser");
 require("dotenv").config();
 
+const app = express();
+app.use(cookieParser());
 app.use(express.json());
-app.use(cors());
 
-const users = [
-  { name: "Bryson", tableauAuth: 1 },
-  { name: "notbryson", tableauAuth: 2 },
-];
-let refreshTokens = [];
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", req.headers.origin);
+  res.header(
+    "Access-Control-Allow-Headers",
+    "Origin, X-Requested-With, Content-Type, Accept"
+  );
+  res.header("Access-Control-Allow-Credentials", true);
+  res.header("Access-Control-Allow-Methods", "POST, DELETE, OPTIONS, GET");
+  next();
+});
+app.use(authRoutes);
 
 app.get("/tableau", authenticateToken, (req, res) => {
-  res.json(users.filter((user) => user.name === req.user.name));
+  res.send("You now have access to the tableau");
 });
-
-app.post("/login", (req, res) => {
-  const user = req.body;
-  const accessToken = generateAccessToken(user);
-  const refreshToken = jwt.sign(user, process.env.REFRESH_TOKEN_SECRET, {
-    expiresIn: "24h",
-  });
-  refreshTokens.push(refreshToken);
-  res.json({ accessToken, refreshToken });
-});
-
-app.delete("/logout", (req, res) => {
-  refreshTokens = refreshTokens.filter((token) => token !== req.body.token);
-  res.sendStatus(204);
-});
-
-app.post("/token", (req, res) => {
-  const requestToken = req.body.token;
-  if (requestToken === null) return res.sendStatus(401);
-  if (!refreshTokens.includes(requestToken)) return res.sendStatus(403);
-  jwt.verify(requestToken, process.env.REFRESH_TOKEN_SECRET, (err, user) => {
-    if (err) return res.sendStatus(403);
-    const accessToken = generateAccessToken({ name: user.name });
-    res.json(accessToken);
-  });
-});
-
-function generateAccessToken(user) {
-  return jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, { expiresIn: "15s" });
-}
 
 function authenticateToken(req, res, next) {
-  const authHeader = req.headers["authorization"];
-  const token = authHeader && authHeader.split(" ")[1];
-  if (token === null) return res.sendStatus(401);
+  const token = req.cookies["jwt"];
+  if (!token) return res.sendStatus(403);
+  //check if token is in blacklist
   jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, user) => {
+    err && console.log(err);
     if (err) return res.sendStatus(403);
     req.user = user;
     next();
   });
 }
 
-app.listen(5000, () => {
-  console.log("app is running on port 5000");
+app.listen(process.env.PORT, () => {
+  console.log(`app is running on port ${process.env.PORT}`);
 });
